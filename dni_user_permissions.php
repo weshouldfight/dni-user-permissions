@@ -3,7 +3,7 @@
 Plugin Name: Intranet Benutzer-Rechte
 Plugin URI: http://www.das-neue-intranet.de
 Description: Rechte der WordPress-Benutzer verwalten.
-Version: 1.0
+Version: 1.1
 Author: studioh8
 Author URI: http://www.studioh8.de
 License: GPL2
@@ -25,11 +25,28 @@ function dni_add_pages() {
 }
 
 
+/*-------------------------------------------------
+	RESTRICT USER QUERY TO ONE ROLE (optional)
+-------------------------------------------------*/
+
+$mng_role = '';
+
+
+
 /*-------------------------------------------
 	DISPLAY THE SETTINGS PAGE
 -------------------------------------------*/
 
-function dni_settings_page() { ?>
+function dni_settings_page() {
+	
+	global $mng_role;
+	
+	$post_types = get_post_types( array( 'public' => true, '_builtin' => false ) );
+	//$dont_touch = get_post_types( array( 'capability_type' => 'post' ) );
+	//$post_types = array_diff( $post_types, $dont_touch );
+	
+	?>
+			
     
     <div class="wrap">
     	<h2><?php echo __( 'Benutzerrechte', 'user-permissions' ); ?></h2>
@@ -53,18 +70,29 @@ function dni_settings_page() { ?>
 				</tr>
 			</tfoot>
 			<tbody>
-			<?php $user_query = new WP_User_Query( array( 'role' => 'Author' ) );
-			var_dump($user_query);
+			<?php $user_query = new WP_User_Query( array( 'role' => $mng_role ) );
+			// var_dump($user_query);
 			if ( ! empty( $user_query->results ) ) {
-				foreach ( $user_query->results as $user ) { ?>
+				foreach ( $user_query->results as $user ) { 
+					$user_role = $user->roles; ?>
 					<tr>
-						<td><?php echo $user->user_login; ?></td>
+						<td><?php echo $user->user_login; ?><?php if ($user_role == 'administrator') {echo ' <small>(Admin)</small>';} ?></td>
 						<td><?php echo $user->display_name; ?></td>
 						<td>
-							<input name="<?php echo $user->ID; ?>_can_news" id="<?php echo $user->ID; ?>_can_news" type="checkbox" value="1" <?php checked(isset($user->allcaps['edit_posts'])); ?> /> News<br />
-							<input name="<?php echo $user->ID; ?>_can_dokument" id="<?php echo $user->ID; ?>_can_dokument" type="checkbox" value="1" <?php checked(isset($user->allcaps['edit_dokument'])); ?> /> Dokumente<br />
-							<input name="<?php echo $user->ID; ?>_can_mitarbeiter" id="<?php echo $user->ID; ?>_can_mitarbeiter" type="checkbox" value="1" <?php checked(isset($user->allcaps['edit_mitarbeiter'])); ?> /> Mitarbeiter<br />
-							<input name="<?php echo $user->ID; ?>_can_produkt" id="<?php echo $user->ID; ?>_can_produkt" type="checkbox" value="1" <?php checked(isset($user->allcaps['edit_produkt'])); ?> /> Produkte
+						<?php foreach( $post_types as $post_type ) { 
+							$post_type_details 	= get_post_type_object( $post_type );
+							$post_type_cap 		= $post_type_details->capability_type;
+							$post_type_caps		= $post_type_details->cap;			
+							$post_type_name		= $post_type_details->labels->name;
+							$input_id			= $user->ID.'_can_'.$post_type_cap;
+							
+							if ($user_role != 'administrator') { ?>
+								<input name="<?php echo $input_id ?>" id="<?php echo $input_id ?>" type="checkbox" value="1" <?php checked(isset($user->allcaps[$post_type_caps->edit_posts])); ?> /> <?php echo $post_type_name; ?><br />
+								<?php } else { ?>
+								<input name="<?php echo $input_id ?>" id="<?php echo $input_id ?>" type="hidden" value="1" <?php checked(isset($user->allcaps[$post_type_caps->edit_posts])); ?> />
+								<input name="<?php echo $input_id ?>-dis" id="<?php echo $input_id ?>-dis" type="checkbox" value="1" <?php checked(isset($user->allcaps[$post_type_caps->edit_posts])); ?> disabled /> <?php echo $post_type_name; ?><br />
+								<?php } ?>
+							<?php } ?>
 						</td>
 					</tr>
 					<?php } } else { ?>
@@ -90,68 +118,38 @@ function dni_settings_page() { ?>
 function dni_admin_action() {
 	
 	check_admin_referer( 'testtest' );	
+	global $mng_role;
 	
 	/* Hier kommt die Aktion */
 	
-	$list_users = new WP_User_Query( array( 'role' => 'Author' ) );
+	$list_users = new WP_User_Query( array( 'role' => $mng_role ) );
 		if ( ! empty( $list_users->results ) ) {
-			$cap_news = array( 'edit_posts', 'read_posts', 'delete_posts' );
-			$cap_dokumente = array( 'edit_dokument', 'read_dokument', 'delete_dokument' );
-			$cap_mitarbeiter = array( 'edit_mitarbeiter', 'read_mitarbeiter', 'delete_mitarbeiter' );
-			$cap_produkte = array( 'edit_produkt', 'read_produkt', 'delete_produkt' );
-			foreach ( $list_users->results as $user ) {
+			
+			$post_types = get_post_types( array( 'public' => true, '_builtin' => false ) );
+			foreach( $post_types as $post_type ) {
+			
+				$post_type_details 	= get_post_type_object( $post_type );
+				$post_type_cap 		= $post_type_details->capability_type;
+				$post_type_caps		= $post_type_details->cap;
 				
-				/* Check News */
-				$user_id = $user->ID;
-				if ( isset( $_POST[$user->ID.'_can_news'] ) ) {
-					foreach( $cap_news as $cap ) {
-						$user->add_cap( $cap );
-					}
-				} else {
-					foreach( $cap_news as $cap ) {
-						$user->remove_cap( $cap );
-					}
-				}
+				foreach ( $list_users->results as $user ) {
 				
-				/* Check Dokumente */
-				$user_id = $user->ID;
-				if ( isset( $_POST[$user->ID.'_can_dokument'] ) ) {
-					foreach( $cap_dokumente as $cap ) {
-						$user->add_cap( $cap );
+					$input_id = $user->ID.'_can_'.$post_type_cap;
+					
+					if ( isset( $_POST[$input_id] ) ) {
+						foreach( $post_type_caps as $cap ) {
+							$user->add_cap( $cap );
+						}
+					} else {
+						foreach( $post_type_caps as $cap ) {
+							$user->remove_cap( $cap );
+						}
 					}
-				} else {
-					foreach( $cap_dokumente as $cap ) {
-						$user->remove_cap( $cap );
-					}
-				}
-				
-				/* Check Mitarbeiter */
-				$user_id = $user->ID;
-				if ( isset( $_POST[$user->ID.'_can_mitarbeiter'] ) ) {
-					foreach( $cap_mitarbeiter as $cap ) {
-						$user->add_cap( $cap );
-					}
-				} else {
-					foreach( $cap_mitarbeiter as $cap ) {
-						$user->remove_cap( $cap );
-					}
-				}
-				
-				/* Check Produkte */
-				$user_id = $user->ID;
-				if ( isset( $_POST[$user->ID.'_can_produkt'] ) ) {
-					foreach( $cap_produkte as $cap ) {
-						$user->add_cap( $cap );
-					}
-				} else {
-					foreach( $cap_produkte as $cap ) {
-						$user->remove_cap( $cap );
-					}
-				}
-				
-			} /* End foreach $user */
-		
-		}
+					
+				} /* End foreach $user */
+			} /* End foreach $post_type */
+			
+		}/* End if list_users */
 		else {}
 		
 		wp_redirect( $_SERVER['HTTP_REFERER'] );
