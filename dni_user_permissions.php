@@ -3,7 +3,7 @@
 Plugin Name: Intranet Benutzer-Rechte
 Plugin URI: http://www.das-neue-intranet.de
 Description: Rechte der WordPress-Benutzer verwalten.
-Version: 1.1
+Version: 1.0
 Author: studioh8
 Author URI: http://www.studioh8.de
 License: GPL2
@@ -21,7 +21,7 @@ add_action('admin_menu', 'dni_add_pages');
 // action function for above hook
 function dni_add_pages() {
     global $dni_user_permissions;// Add a new submenu under Settings:
-    $dni_user_permissions = add_users_page(__('Benutzerrechte','user-permissions'), __('Benutzerrechte','user-permissions'), 'manage_options', 'user-permissions', 'dni_settings_page');
+    $dni_user_permissions = add_users_page(__('Benutzerrechte','dni'), __('Benutzerrechte','dni'), 'manage_options', 'user-permissions', 'dni_settings_page');
 }
 
 
@@ -49,7 +49,13 @@ function dni_settings_page() {
 			
     
     <div class="wrap">
-    	<h2><?php echo __( 'Benutzerrechte', 'user-permissions' ); ?></h2>
+    	<h2><?php echo __( 'Benutzerrechte', 'dni' ); ?></h2>
+    	
+    	<?php if ( isset( $_GET['updated'] ) ) {
+			echo "<div class='updated'><p>Rechte wurden aktualisiert.</p></div>";
+		} elseif ( isset( $_GET['not_updated'] ) ) {
+			echo "<div class='error'><p>Es ist ein Fehler aufgetreten.</p></div>";
+		} ?>
     
 		<form id="dni-form" action="<?php echo admin_url( 'admin.php' ); ?>" method="POST">
 		<input type="hidden" name="action" value="dni" />
@@ -73,9 +79,12 @@ function dni_settings_page() {
 			<?php $user_query = new WP_User_Query( array( 'role' => $mng_role ) );
 			// var_dump($user_query);
 			if ( ! empty( $user_query->results ) ) {
+					$x = 1;
 				foreach ( $user_query->results as $user ) { 
-					$user_role = $user->roles; ?>
-					<tr>
+					$user_role = $user->roles;
+					$x++;
+					$alt_class = ($x%2 == 0)? 'alternate': 'uneven'; ?>
+					<tr class="<?php echo $alt_class; ?>">
 						<td><?php echo $user->user_login; ?><?php if ($user_role == 'administrator') {echo ' <small>(Admin)</small>';} ?></td>
 						<td><?php echo $user->display_name; ?></td>
 						<td>
@@ -147,13 +156,20 @@ function dni_admin_action() {
 					}
 					
 				} /* End foreach $user */
-			} /* End foreach $post_type */
+			} /* End foreach $post_type */ ?>
 			
-		}/* End if list_users */
-		else {}
+			<?php $updated = 'updated'; ?>
+			
+		<?php }/* End if list_users */
+		else {$updated = 'not_updated';} ?>
 		
-		wp_redirect( $_SERVER['HTTP_REFERER'] );
+		<?php
+		// $location = $_SERVER[HTTP_REFERER].'?updated='.$updated ;
+		$location = admin_url('users.php?page=user-permissions&').$updated;
+		wp_safe_redirect( $location );
 		exit();
+		
+		
 	
 	/* Ende Aktion */
 	
